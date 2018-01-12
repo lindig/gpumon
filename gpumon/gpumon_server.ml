@@ -23,8 +23,8 @@ module Make(I: Interface) = struct
 
   module Nvidia = struct
     
-    let host_driver_supporting_migration = 0
-    (** first major version of the host driver that supports migration *)
+    let host_driver_supporting_migration = 385
+    (** Smallest major version of the host driver that supports migration *)
 
     let get_interface_exn () = 
     match I.interface with
@@ -51,8 +51,8 @@ module Make(I: Interface) = struct
           compat
         else
           let msg = Printf.sprintf
-            "%s: pGPU host driver version %d does not support migration"
-            this major in
+            "%s: pGPU host driver version %d < %d does not support migration"
+            this major host_driver_supporting_migration in
           raise (Gpumon_interface.NvmlFailure msg)
       with
         | Gpumon_interface.NvmlFailure(_) as err -> raise err
