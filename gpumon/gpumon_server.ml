@@ -20,6 +20,7 @@ module type IMPLEMENTATION = sig
     val get_vgpu_metadata           : debug_info -> domid                -> pgpu_address              -> nvidia_vgpu_metadata list
     val get_pgpu_vm_compatibility   : debug_info -> pgpu_address         -> domid                     -> nvidia_pgpu_metadata -> compatibility
     val get_pgpu_vgpu_compatibility : debug_info -> nvidia_pgpu_metadata -> nvidia_vgpu_metadata list -> compatibility
+    val reset                       : debug_info -> unit
   end
 end
 
@@ -135,5 +136,15 @@ module Make(I: Interface):IMPLEMENTATION = struct
         dbg
         pgpu_metadata
         (get_vgpu_metadata dbg domid pgpu_address)
+
+    let reset _dbg =
+      try
+        let interface = get_interface_exn () in
+        Nvml.shutdown interface;
+        Nvml.init interface
+      with e ->
+        let exn = Printexc.to_string e in
+        let msg = Printf.sprintf "Failed to reset NVML interface: %s" exn in
+        raise Gpumon_interface.(Gpumon_error (NvmlFailure msg))
   end
 end
