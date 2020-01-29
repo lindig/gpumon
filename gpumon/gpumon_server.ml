@@ -14,19 +14,39 @@
 
 module type IMPLEMENTATION = sig
   open Gpumon_interface
-  
+
   module Nvidia: sig
-    val get_pgpu_metadata           : debug_info -> pgpu_address         -> nvidia_pgpu_metadata
-    val get_vgpu_metadata           : debug_info -> domid                -> pgpu_address              -> vgpu_uuid            -> nvidia_vgpu_metadata list
-    val get_pgpu_vm_compatibility   : debug_info -> pgpu_address         -> domid                     -> nvidia_pgpu_metadata -> compatibility
-    val get_pgpu_vgpu_compatibility : debug_info -> nvidia_pgpu_metadata -> nvidia_vgpu_metadata list -> compatibility
+    val get_pgpu_metadata
+      : debug_info
+      -> pgpu_address
+      -> nvidia_pgpu_metadata
+    val get_vgpu_metadata
+      : debug_info
+      -> domid
+      -> pgpu_address
+      -> vgpu_uuid
+      -> nvidia_vgpu_metadata list
+    val get_pgpu_vm_compatibility
+      : debug_info
+      -> pgpu_address
+      -> domid
+      -> nvidia_pgpu_metadata
+      -> compatibility
+    val get_pgpu_vgpu_compatibility
+      : debug_info
+      -> nvidia_pgpu_metadata
+      -> nvidia_vgpu_metadata list
+      -> compatibility
+
+    val attach      : debug_info -> unit
+    val detach      : debug_info -> unit
+    val is_attached : debug_info -> bool
+
   end
 end
 
-
-
 module type Interface = sig
-  val interface: Nvml.interface option
+  val interface: unit -> Nvml.interface option
 end
 
 module Make(I: Interface):IMPLEMENTATION = struct
@@ -39,7 +59,7 @@ module Make(I: Interface):IMPLEMENTATION = struct
     (** Smallest major version of the host driver that supports migration *)
 
     let get_interface_exn () =
-      match I.interface with
+      match I.interface () with
       | Some interface -> interface
       | None -> raise Gpumon_interface.(Gpumon_error NvmlInterfaceNotAvailable)
 
@@ -140,5 +160,19 @@ module Make(I: Interface):IMPLEMENTATION = struct
         dbg
         pgpu_metadata
         (get_vgpu_metadata dbg domid pgpu_address "")
+
+
+    let fail exn =
+      raise Gpumon_interface.(Gpumon_error (NvmlFailure (Printexc.to_string exn)))
+
+    let attach _dbg =
+      try Nvml.NVML.attach () with exn -> fail exn
+
+    let detach _dbg =
+      try Nvml.NVML.detach () with exn -> fail exn
+
+    let is_attached _dbg =
+      try Nvml.NVML.is_attached () with exn -> fail exn
+
   end
 end
