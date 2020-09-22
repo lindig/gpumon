@@ -1,3 +1,5 @@
+module D = Debug.Make (struct let name = "nvml" end)
+
 exception Library_not_loaded of string
 
 exception Symbol_not_loaded of string
@@ -133,3 +135,58 @@ let get_vgpu_for_uuid iface vgpu_uuid vgpus =
       | _ ->
           None)
     vgpus
+
+module NVML : sig
+  val attach : unit -> unit
+
+  val detach : unit -> unit
+
+  val is_attached : unit -> bool
+
+  val get : unit -> interface option
+end = struct
+  let interface = ref (None : interface option)
+
+  let mx = Mutex.create ()
+
+  let defer f = Fun.protect ~finally:f
+
+  let with_mutex mx f =
+    Mutex.lock mx ;
+    defer (fun () -> Mutex.unlock mx) @@ fun () -> f ()
+
+  let open_nvml_interface () =
+    let interface = library_open () in
+    try init interface ; interface with e -> library_close interface ; raise e
+
+  let get () = !interface
+
+  let attach () =
+    with_mutex mx @@ fun () ->
+    match !interface with
+    | Some _ ->
+        D.warn "Nvml library attach: library already attached"
+    | None -> (
+      match open_nvml_interface () with
+      | i ->
+          interface := Some i ;
+          D.info "Nvml library attach: success"
+      | exception e ->
+          interface := None ;
+          D.warn "Nvml library attach: failure: %s" (Printexc.to_string e)
+    )
+
+  let detach () =
+    with_mutex mx @@ fun () ->
+    match !interface with
+    | None ->
+        D.warn "Nvml library detach: not library attached"
+    | Some intf ->
+        D.info "Nvml library detach: detaching" ;
+        defer (fun () ->
+            interface := None ;
+            library_close intf)
+        @@ fun () -> shutdown intf
+
+  let is_attached () = match !interface with None -> false | Some _ -> true
+end
